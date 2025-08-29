@@ -29,13 +29,12 @@ def generate_correlated_variables_for_wwr(Nmc: int, rate_paths: np.ndarray,
     """
     Génère des variables corrélées pour le Wrong-Way Risk.
     
-    THÉORIE CORRIGÉE: Pour un swap PAYER, le WWR survient quand une hausse des taux
+    Pour un swap PAYER, le WWR survient quand une hausse des taux
     (qui augmente l'exposition) est corrélée à une hausse du risque de défaut.
     
-    APPROCHE: Corrélation avec les taux finaux (représentent l'impact cumulé)
+    Approche: Corrélation avec les taux finaux (représentent l'impact cumulé)
     """
     # Facteur systémique basé sur les taux finaux
-    # Les taux finaux capturent l'effet cumulé de la dérive vers theta
     rate_systemic = rate_paths[:, -1]  # Taux à maturité
     rate_normalized = (rate_systemic - np.mean(rate_systemic)) / np.std(rate_systemic)
     
@@ -52,7 +51,7 @@ class VasicekModel:
     """
     Modèle de Vasicek: dr = κ(θ - r)dt + σdW
     
-    CORRECTION CLEF: Si r0 < θ, les taux montent en moyenne (courbe ascendante)
+    Si r0 < θ, les taux montent en moyenne (courbe ascendante)
     Si r0 > θ, les taux baissent en moyenne (courbe inversée)
     """
     
@@ -85,8 +84,6 @@ class VasicekModel:
         """
         Prix du zéro-coupon Vasicek: P(t,T) = A(τ) * exp(-B(τ) * r(t))
         où τ = T - t est la maturité résiduelle
-        
-        CORRECTION: Accepte un vecteur de taux pour la vectorisation
         """
         if self.kappa == 0:
             B = tau
@@ -103,7 +100,7 @@ class InterestRateSwap:
     """
     Swap de taux d'intérêt avec valorisation rigoureuse
     
-    CORRECTION MAJEURE: Re-valorisation complète du swap à chaque pas de temps
+    Re-valorisation complète du swap à chaque pas de temps
     en utilisant les formules analytiques Vasicek
     """
     
@@ -127,7 +124,7 @@ class InterestRateSwap:
         """
         Calcul rigoureux du taux swap at-the-money
         
-        FORMULE: R_ATM = (1 - P(0,Tn)) / Σ(Δt * P(0,Ti))
+        Formule: R_ATM = (1 - P(0,Tn)) / Σ(Δt * P(0,Ti))
         """
         dt = 1.0 / self.params.payment_frequency
         
@@ -147,9 +144,9 @@ class InterestRateSwap:
     
     def calculate_npv_paths(self, rate_paths: np.ndarray, time_grid: np.ndarray) -> np.ndarray:
         """
-        CORRECTION FONDAMENTALE: Calcul de la NPV par re-valorisation complète
+        Calcul de la NPV par re-valorisation complète
         
-        THÉORIE: 
+        Théorie: 
         - NPV(t) = PV_flottant(t) - PV_fixe(t) pour un PAYER
         - PV_fixe(t) = K * N * Σ P(t, Ti, r(t)) * Δt
         - PV_flottant(t) = N * (1 - P(t, Tn, r(t)))
@@ -210,10 +207,7 @@ class DefaultModel:
         """
         Simule les temps de défaut via copule gaussienne
         
-        CORRECTION MAJEURE selon feedback du professeur:
-        Inversion de la logique pour un vrai Wrong-Way Risk
-        
-        LOGIQUE CORRIGÉE:
+        Logique:
         - Z_latent élevé (forte exposition, mauvaise situation) 
         - → U = cdf(-Z_latent) faible (proche de 0)
         - → temps de défaut = -log(U)/lambda court (défaut précoce)
@@ -221,22 +215,17 @@ class DefaultModel:
         if Z_latent is None:
             Z_latent = np.random.normal(0, 1, Nmc)
         
-        # CORRECTION CRITIQUE: Inverser la relation
-        # Un Z_latent élevé (forte exposition, mauvaise situation) doit mener 
-        # à un défaut précoce (temps court)
-        U = stats.norm.cdf(-Z_latent)  # Inversion du signe !
+        # Un Z_latent élevé mène à un défaut précoce (temps court)
+        U = stats.norm.cdf(-Z_latent)
         U = np.clip(U, 1e-10, 1-1e-10)  # Évite log(0)
         
-        # Transformation standard: si U faible → -log(U) grand → défaut précoce pour lambda élevé
-        # Mais nous voulons: U faible → temps court
-        # Donc on utilise la transformation de survie: t = -log(U)/lambda
         return -np.log(U) / self.lambda_default
 
 class CVAEngine:
     """
     Moteur CVA avec actualisation stochastique cohérente
     
-    CORRECTION CRITIQUE: Utilisation des facteurs d'actualisation stochastiques
+    Utilisation des facteurs d'actualisation stochastiques
     au lieu d'un taux constant
     """
     
@@ -251,7 +240,7 @@ class CVAEngine:
         pfe_95 = np.percentile(positive_exposure, 95, axis=0)  # PFE 95%
         pfe_99 = np.percentile(positive_exposure, 99, axis=0)  # PFE 99%
         
-        # Calcul simple de l'EPE sans problème de dimensions
+        # Calcul de l'EPE
         epe = np.mean(ee)
         
         return {
@@ -265,11 +254,11 @@ class CVAEngine:
     def calculate_stochastic_discount_factors(self, rate_paths: np.ndarray, 
                                             time_grid: np.ndarray) -> np.ndarray:
         """
-        CORRECTION: Calcul des facteurs d'actualisation stochastiques
+        Calcul des facteurs d'actualisation stochastiques
         
         D(0,t) = exp(-∫₀ᵗ r(s)ds)
         """
-        # CORRECTION: S'assurer que les dimensions correspondent
+        # S'assurer que les dimensions correspondent
         n_rate_steps = rate_paths.shape[1]
         n_time_steps = len(time_grid)
         
@@ -295,7 +284,7 @@ class CVAEngine:
                            time_grid: np.ndarray,
                            rate_paths: np.ndarray) -> dict:
         """
-        CORRECTION: CVA direct avec actualisation stochastique path-dependent
+        CVA direct avec actualisation stochastique path-dependent
         
         CVA = LGD * E[1_{τ≤T} * D(0,τ) * EE(τ)]
         où D(0,τ) = exp(-∫₀^τ r(s)ds) est stochastique
@@ -335,35 +324,29 @@ class CVAEngine:
 
 def main():
     """
-    FONCTION PRINCIPALE CORRIGÉE selon feedback du professeur
+    Fonction principale - Modèle CVA avec Wrong-Way Risk
     
-    CORRECTION MAJEURE appliquée:
-    - Inversion de la logique de défaut dans DefaultModel.simulate_default_times
-    - U = stats.norm.cdf(-Z_latent) au lieu de stats.norm.cdf(Z_latent)
-    - Cette simple inversion transforme le Right-Way Risk en Wrong-Way Risk
-    
-    LOGIQUE THÉORIQUE:
+    Logique théorique:
     1. Configuration: r₀ < θ → taux montent en moyenne (courbe ascendante)
     2. Swap PAYER: exposition positive si taux > taux fixe
     3. Corrélation: taux élevés → Z_latent élevé → défaut précoce (WWR)
     4. Résultat attendu: CVA avec WWR > CVA sans WWR
     """
     
-    print("=== MODÈLE CVA CORRIGÉ - RÉSOLUTION DU PARADOXE WWR ===")
-    print("CORRECTION APPLIQUÉE: Inversion logique défaut (feedback professeur)")
+    print("=== MODÈLE CVA - WRONG-WAY RISK ===")
     
     # Paramètres de simulation
     Nmc = 20000  # Nombre de simulations Monte Carlo
     T = 5.0      # Maturité
     dt = 1/24    # Pas de temps
     
-    # Configuration corrigée pour Wrong-Way Risk
-    # Courbe ASCENDANTE: initial_rate < theta pour que les taux montent en moyenne
+    # Configuration pour Wrong-Way Risk
+    # Courbe ascendante: initial_rate < theta pour que les taux montent en moyenne
     market_data = MarketData(
         r=0.02,              # Taux de référence
         sigma=0.02,          # Volatilité modérée  
-        initial_rate=0.02,   # 2.0% < theta ✓
-        theta=0.04,          # 4.0% > initial_rate ✓  
+        initial_rate=0.02,   # 2.0% < theta
+        theta=0.04,          # 4.0% > initial_rate  
         spread_credit=0.015, # 150 bp pour CVA réaliste
         recovery_rate=0.4,
         kappa=0.2            # Vitesse de retour modérée
@@ -378,11 +361,10 @@ def main():
         is_payer=True        # Position PAYER sensible à la hausse des taux
     )
     
-    print(f"CONFIGURATION THÉORIQUE:")
+    print(f"Configuration:")
     print(f"- Courbe taux: r₀={market_data.initial_rate:.1%} < θ={market_data.theta:.1%}")
     print(f"- Direction attendue: Hausse des taux")
     print(f"- Position swap: PAYER (exposition positive si taux montent)")
-    print(f"- Correction appliquée: Défaut précoce si Z_latent élevé")
     
     # 1. Initialisation des modèles
     print("\n1. Initialisation du modèle Vasicek...")
@@ -396,14 +378,13 @@ def main():
     zcb_5y = rate_model.zero_coupon_bond(5.0, np.array([market_data.initial_rate]))[0]
     print(f"   P(0,1Y) = {zcb_1y:.4f}")
     print(f"   P(0,5Y) = {zcb_5y:.4f}")
-    print(f"   Courbe: {'Ascendante ✓' if zcb_1y > zcb_5y else 'Descendante'}")
+    print(f"   Courbe: {'Ascendante' if zcb_1y > zcb_5y else 'Descendante'}")
     
     # 2. Calcul du taux swap ATM
     print("\n2. Calcul du swap ATM...")
     swap = InterestRateSwap(swap_params, market_data, rate_model)
     print(f"   Taux initial: {market_data.initial_rate:.3%}")
     print(f"   Taux ATM: {swap.params.fixed_rate:.3%}")
-    print(f"   Relation: {'ATM > initial ✓' if swap.params.fixed_rate > market_data.initial_rate else 'ATM < initial'}")
     
     # 3. Simulation des trajectoires
     print("\n3. Simulation des trajectoires de taux...")
@@ -412,15 +393,15 @@ def main():
     rate_paths = rate_model.simulate_paths(T, dt, Nmc)
     
     print(f"   Taux final moyen: {np.mean(rate_paths[:, -1]):.3%}")
-    print(f"   Convergence vers θ: {'✓' if abs(np.mean(rate_paths[:, -1]) - market_data.theta) < 0.01 else '✗'}")
+    print(f"   Convergence vers θ: {abs(np.mean(rate_paths[:, -1]) - market_data.theta) < 0.01}")
     
-    # 4. Calcul de l'exposition (CORRECTION: re-valorisation complète)
+    # 4. Calcul de l'exposition par re-valorisation
     print("\n4. Calcul de l'exposition par re-valorisation...")
     npv_paths = swap.calculate_npv_paths(rate_paths, time_grid)
     
     print(f"   NPV initiale moyenne: {np.mean(npv_paths[:, 0]):,.0f} EUR")
     print(f"   Max exposition: {np.max(npv_paths):,.0f} EUR")
-    print(f"   At-the-money: {'✓' if abs(np.mean(npv_paths[:, 0])) < 1000 else f'Écart: {np.mean(npv_paths[:, 0]):,.0f}'}")
+    print(f"   At-the-money: {abs(np.mean(npv_paths[:, 0])) < 1000}")
     
     # 5. Modèles de défaut
     print("\n5. Simulation des défauts...")
@@ -447,9 +428,6 @@ def main():
     print("\n8. CVA avec Wrong-Way Risk...")
     correlation_wwr = -0.5
     
-    # CORRECTION APPLIQUÉE selon feedback professeur:
-    # Retour à l'approche classique de corrélation avec les taux
-    # La correction principale était dans la transformation du défaut
     Z_correlated = generate_correlated_variables_for_wwr(Nmc, rate_paths, correlation_wwr)
     default_times_wwr = default_model.simulate_default_times(T, Nmc, Z_correlated)
     results_wwr = cva_engine.calculate_cva_direct(
@@ -459,13 +437,13 @@ def main():
     print(f"   CVA avec WWR (ρ={correlation_wwr:.0%}): {cva_wwr:,.0f} EUR")
     
     # 9. Analyse de l'impact WWR
-    print("\n9. ANALYSE DES RÉSULTATS:")
+    print("\n9. Analyse des résultats:")
     impact_abs = cva_wwr - cva_no_wwr
     impact_rel = (cva_wwr / cva_no_wwr - 1) * 100 if cva_no_wwr > 0 else 0
     
     print(f"   Impact WWR: {impact_abs:,.0f} EUR ({impact_rel:+.1f}%)")
     print(f"   CVA en bp: {cva_wwr/swap_params.notional*10000:.1f}")
-    print(f"   Direction: {'Wrong-Way ✓' if impact_rel > 0 else 'Right-Way ✗'}")
+    print(f"   Direction: {'Wrong-Way' if impact_rel > 0 else 'Right-Way'}")
     print(f"   EPE: {exposure_metrics['epe']:,.0f} EUR")
     
     # 10. Validation empirique de la corrélation
@@ -480,123 +458,125 @@ def main():
         cva_no_wwr, cva_wwr, market_data, empirical_corr, swap.payment_dates
     )
     
-    # RÉSUMÉ FINAL
-    print("\n" + "="*70)
-    print("RÉSUMÉ FINAL - VALIDATION ACADÉMIQUE")
-    print("="*70)
+    # Résumé final
+    print("\n" + "="*60)
+    print("RÉSUMÉ - WRONG-WAY RISK")
+    print("="*60)
     
     cva_wwr_bp = cva_wwr/swap_params.notional*10000
     cva_no_wwr_bp = cva_no_wwr/swap_params.notional*10000
     
-    print(f"{'CONFIGURATION THÉORIQUE:':<35}")
-    print(f"{'- Courbe des taux:':<35} r₀={market_data.initial_rate:.1%} < θ={market_data.theta:.1%} ✓")
-    print(f"{'- Position swap:':<35} PAYER (sensible à la hausse)")
-    print(f"{'- Corrélation WWR:':<35} ρ={correlation_wwr:.1%} (positive)")
-    print("-" * 70)
+    print(f"Configuration théorique:")
+    print(f"- Courbe des taux: r₀={market_data.initial_rate:.1%} < θ={market_data.theta:.1%}")
+    print(f"- Position swap: PAYER (sensible à la hausse)")
+    print(f"- Corrélation WWR: ρ={correlation_wwr:.1%}")
+    print("-" * 60)
     
-    print(f"{'RÉSULTATS CORRIGÉS:':<35}")
-    print(f"{'CVA sans WWR (bp):':<35} {cva_no_wwr_bp:.1f}")
-    print(f"{'CVA avec WWR (bp):':<35} {cva_wwr_bp:.1f}")
-    print(f"{'Impact WWR (bp):':<35} {(cva_wwr_bp - cva_no_wwr_bp):.1f}")
-    print(f"{'IC Monte Carlo:':<35} ±{results_wwr['confidence_95']:.0f} EUR")
-    print("-" * 70)
+    print(f"Résultats:")
+    print(f"CVA sans WWR (bp): {cva_no_wwr_bp:.1f}")
+    print(f"CVA avec WWR (bp): {cva_wwr_bp:.1f}")
+    print(f"Impact WWR (bp): {(cva_wwr_bp - cva_no_wwr_bp):.1f}")
+    print(f"IC Monte Carlo: ±{results_wwr['confidence_95']:.0f} EUR")
+    print("-" * 60)
     
-    print(f"{'VALIDATIONS:':<35}")
-    print(f"{'WWR direction:':<35} {'Wrong-Way ✓' if impact_rel > 0 else 'Right-Way ✗'}")
-    print(f"{'CVA réaliste:':<35} {'✓' if cva_wwr_bp > 5 else '✗'} ({cva_wwr_bp:.1f} bp)")
-    print(f"{'Impact significatif:':<35} {'✓' if abs(impact_rel) > 10 else '✗'} ({impact_rel:.1f}%)")
+    print(f"Validation:")
+    print(f"WWR direction: {'Wrong-Way' if impact_rel > 0 else 'Right-Way'}")
+    print(f"CVA réaliste: {cva_wwr_bp:.1f} bp")
+    print(f"Impact significatif: {impact_rel:.1f}%")
     
     success = (impact_rel > 0 and cva_wwr_bp > 5 and abs(impact_rel) > 10)
-    print("="*70)
-    print(f"{'✓ PARADOXE WWR RÉSOLU' if success else '✗ VÉRIFICATIONS REQUISES'}")
-    print("="*70)
+    print("="*60)
+    print(f"{'Wrong-Way Risk validé' if success else 'Vérifications requises'}")
+    print("="*60)
 
 def create_validation_plots(time_grid, rate_paths, npv_paths, exposure_metrics,
                           cva_no_wwr, cva_wwr, market_data, empirical_corr, payment_dates):
-    """Graphiques de validation du modèle corrigé"""
+    """Graphiques de validation du modèle"""
     
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    
-    # 1. Trajectoires de taux
-    ax1 = axes[0, 0]
-    sample_size = min(100, rate_paths.shape[0])
-    
-    # CORRECTION: S'assurer que les dimensions correspondent
+    # S'assurer que les dimensions correspondent
     n_time = min(len(time_grid), rate_paths.shape[1])
     time_plot = time_grid[:n_time]
     
-    for i in range(sample_size):
-        ax1.plot(time_plot, rate_paths[i, :n_time], alpha=0.1, color='steelblue')
-    ax1.plot(time_plot, np.mean(rate_paths[:, :n_time], axis=0), 'darkred', linewidth=3,
-             label=f'Moyenne (→{np.mean(rate_paths[:, -1]):.1%})')
-    ax1.axhline(y=market_data.theta, color='green', linestyle='--', linewidth=2,
-               label=f'θ = {market_data.theta:.1%}')
-    ax1.axhline(y=market_data.initial_rate, color='orange', linestyle=':', linewidth=2,
-               label=f'r₀ = {market_data.initial_rate:.1%}')
-    ax1.set_title('Trajectoires Vasicek - Hausse Attendue ✓', fontweight='bold', color='green')
-    ax1.set_xlabel('Temps (années)')
-    ax1.set_ylabel('Taux')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    # 1. Trajectoires de taux
+    plt.figure(figsize=(10, 6))
+    sample_size = min(100, rate_paths.shape[0])
     
-    # 2. Profil d'exposition - Utilisation de time_plot
-    ax2 = axes[0, 1]
+    for i in range(sample_size):
+        plt.plot(time_plot, rate_paths[i, :n_time], alpha=0.1, color='steelblue')
+    plt.plot(time_plot, np.mean(rate_paths[:, :n_time], axis=0), 'darkred', linewidth=3,
+             label=f'Moyenne (→{np.mean(rate_paths[:, -1]):.1%})')
+    plt.axhline(y=market_data.theta, color='green', linestyle='--', linewidth=2,
+               label=f'θ = {market_data.theta:.1%}')
+    plt.axhline(y=market_data.initial_rate, color='orange', linestyle=':', linewidth=2,
+               label=f'r₀ = {market_data.initial_rate:.1%}')
+    plt.title('Trajectoires Vasicek', fontweight='bold', fontsize=14)
+    plt.xlabel('Temps (années)')
+    plt.ylabel('Taux')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    
+    # 2. Profil d'exposition
+    plt.figure(figsize=(10, 6))
     ee = exposure_metrics['ee']
     pfe_95 = exposure_metrics['pfe_95']
     
-    # Utiliser le même time_plot que pour les taux
     time_ee = time_plot[:len(ee)]
     
-    ax2.plot(time_ee, ee[:len(time_ee)], 'blue', linewidth=3, label='Expected Exposure')
-    ax2.plot(time_ee, pfe_95[:len(time_ee)], 'red', linewidth=2, label='PFE 95%')
-    ax2.fill_between(time_ee, 0, ee[:len(time_ee)], alpha=0.3, color='blue')
-    ax2.set_title('Profil d\'Exposition Positive', fontweight='bold')
-    ax2.set_xlabel('Temps (années)')
-    ax2.set_ylabel('Exposition (EUR)')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
+    plt.plot(time_ee, ee[:len(time_ee)], 'blue', linewidth=3, label='Expected Exposure')
+    plt.plot(time_ee, pfe_95[:len(time_ee)], 'red', linewidth=2, label='PFE 95%')
+    plt.fill_between(time_ee, 0, ee[:len(time_ee)], alpha=0.3, color='blue')
+    plt.title('Profil d\'Exposition', fontweight='bold', fontsize=14)
+    plt.xlabel('Temps (années)')
+    plt.ylabel('Exposition (EUR)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
     
     # 3. Comparaison CVA
-    ax3 = axes[1, 0]
+    plt.figure(figsize=(8, 6))
     cva_values = [cva_no_wwr, cva_wwr]
     labels = ['Sans WWR', f'Avec WWR\n(ρ={empirical_corr:.2f})']
     colors = ['blue', 'red']
     
-    bars = ax3.bar(labels, cva_values, color=colors, alpha=0.8, edgecolor='black')
-    ax3.set_title('CVA Corrigé - Wrong-Way Risk', fontweight='bold')
-    ax3.set_ylabel('CVA (EUR)')
-    ax3.grid(True, alpha=0.3, axis='y')
+    bars = plt.bar(labels, cva_values, color=colors, alpha=0.8, edgecolor='black')
+    plt.title('Comparaison CVA', fontweight='bold', fontsize=14)
+    plt.ylabel('CVA (EUR)')
+    plt.grid(True, alpha=0.3, axis='y')
     
     for bar, value in zip(bars, cva_values):
         height = bar.get_height()
-        ax3.text(bar.get_x() + bar.get_width()/2., height + height*0.02,
+        plt.text(bar.get_x() + bar.get_width()/2., height + height*0.02,
                 f'{value:,.0f}', ha='center', va='bottom', fontweight='bold')
     
     if cva_no_wwr > 0:
         impact_pct = (cva_wwr / cva_no_wwr - 1) * 100
         color = 'green' if impact_pct > 0 else 'red'
-        ax3.text(0.5, max(cva_values)*0.7, f'Impact WWR:\n{impact_pct:+.1f}%',
+        plt.text(0.5, max(cva_values)*0.7, f'Impact WWR:\n{impact_pct:+.1f}%',
                 ha='center', va='center', fontsize=12, fontweight='bold',
-                bbox=dict(boxstyle="round,pad=0.3", facecolor=color, alpha=0.2))
+                bbox=dict(boxstyle="round,pad=0.3", facecolor=color, alpha=0.2),
+                transform=plt.gca().transAxes)
+    
+    plt.tight_layout()
+    plt.show()
     
     # 4. Distribution NPV finale
-    ax4 = axes[1, 1]
+    plt.figure(figsize=(10, 6))
     npv_final = npv_paths[:, -1]
-    ax4.hist(npv_final, bins=50, alpha=0.7, density=True, color='lightblue', edgecolor='black')
+    plt.hist(npv_final, bins=50, alpha=0.7, density=True, color='lightblue', edgecolor='black')
     
     mean_npv = np.mean(npv_final)
-    ax4.axvline(mean_npv, color='red', linestyle='--', linewidth=2,
+    plt.axvline(mean_npv, color='red', linestyle='--', linewidth=2,
                label=f'Moyenne: {mean_npv:,.0f}')
-    ax4.axvline(0, color='black', linestyle='-', linewidth=1, alpha=0.5)
+    plt.axvline(0, color='black', linestyle='-', linewidth=1, alpha=0.5)
     
-    ax4.set_title('Distribution NPV Finale', fontweight='bold')
-    ax4.set_xlabel('NPV finale (EUR)')
-    ax4.set_ylabel('Densité')
-    ax4.legend()
-    ax4.grid(True, alpha=0.3)
-    
-    plt.suptitle('MODÈLE CVA CORRIGÉ - WRONG-WAY RISK VALIDÉ ✓', 
-                 fontsize=16, fontweight='bold', color='darkgreen')
+    plt.title('Distribution NPV Finale', fontweight='bold', fontsize=14)
+    plt.xlabel('NPV finale (EUR)')
+    plt.ylabel('Densité')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
 

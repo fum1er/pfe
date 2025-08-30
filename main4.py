@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Optional, Dict
 import scipy.stats as stats
 import time
+import os
+from pathlib import Path
 
 @dataclass
 class MarketData:
@@ -551,36 +553,44 @@ def run_cva_collateral_analysis() -> Dict:
         }
     }
 
-def plot_collateral_analysis(analysis_results: Dict):
-    """Génère les graphiques d'analyse du collatéral"""
+def save_individual_plots(analysis_results: Dict, output_folder: str):
+    """Sauvegarde chaque graphique individuellement dans le dossier spécifié"""
     
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    # Créer le dossier s'il n'existe pas
+    output_path = Path(output_folder)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n📊 Sauvegarde des graphiques dans: {output_path.absolute()}")
     
     time_grid = analysis_results['time_grid']
     
     # 1. Profils d'exposition comparés
-    ax1 = axes[0, 0]
+    plt.figure(figsize=(12, 8))
     
     ee_no_collat = analysis_results['metrics']['no_collat']['ee']
     ee_with_collat = analysis_results['metrics']['with_collat']['ee']
     
-    ax1.plot(time_grid[:len(ee_no_collat)], ee_no_collat, 'b-', 
-             linewidth=2, label='Sans Collatéral')
-    ax1.plot(time_grid[:len(ee_with_collat)], ee_with_collat, 'g-', 
-             linewidth=2, label='Avec Collatéral')
-    ax1.fill_between(time_grid[:len(ee_no_collat)], 0, ee_no_collat, 
+    plt.plot(time_grid[:len(ee_no_collat)], ee_no_collat, 'b-', 
+             linewidth=3, label='Sans Collatéral', marker='o', markersize=4)
+    plt.plot(time_grid[:len(ee_with_collat)], ee_with_collat, 'g-', 
+             linewidth=3, label='Avec Collatéral', marker='s', markersize=4)
+    plt.fill_between(time_grid[:len(ee_no_collat)], 0, ee_no_collat, 
                      alpha=0.2, color='blue')
-    ax1.fill_between(time_grid[:len(ee_with_collat)], 0, ee_with_collat, 
+    plt.fill_between(time_grid[:len(ee_with_collat)], 0, ee_with_collat, 
                      alpha=0.2, color='green')
     
-    ax1.set_title('Profils d\'Expected Exposure', fontweight='bold')
-    ax1.set_xlabel('Temps (années)')
-    ax1.set_ylabel('Expected Exposure (EUR)')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    plt.title('Profils d\'Expected Exposure', fontweight='bold', fontsize=16)
+    plt.xlabel('Temps (années)', fontsize=12)
+    plt.ylabel('Expected Exposure (EUR)', fontsize=12)
+    plt.legend(fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output_path / '01_profils_exposition.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 01_profils_exposition.png sauvegardé")
     
     # 2. Comparaison CVA (bar chart)
-    ax2 = axes[0, 1]
+    plt.figure(figsize=(12, 8))
     
     scenarios = ['Sans WWR', 'Avec WWR']
     cva_no_collat = [
@@ -595,143 +605,273 @@ def plot_collateral_analysis(analysis_results: Dict):
     x = np.arange(len(scenarios))
     width = 0.35
     
-    bars1 = ax2.bar(x - width/2, cva_no_collat, width, 
-                    label='Sans Collatéral', color='blue', alpha=0.7)
-    bars2 = ax2.bar(x + width/2, cva_with_collat, width, 
-                    label='Avec Collatéral', color='green', alpha=0.7)
+    bars1 = plt.bar(x - width/2, cva_no_collat, width, 
+                    label='Sans Collatéral', color='blue', alpha=0.8, edgecolor='black')
+    bars2 = plt.bar(x + width/2, cva_with_collat, width, 
+                    label='Avec Collatéral', color='green', alpha=0.8, edgecolor='black')
     
-    ax2.set_title('Impact du Collatéral sur le CVA', fontweight='bold')
-    ax2.set_ylabel('CVA (EUR)')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(scenarios)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3, axis='y')
+    plt.title('Impact du Collatéral sur le CVA', fontweight='bold', fontsize=16)
+    plt.ylabel('CVA (EUR)', fontsize=12)
+    plt.xticks(x, scenarios, fontsize=12)
+    plt.legend(fontsize=12)
+    plt.grid(True, alpha=0.3, axis='y')
     
     # Ajouter les valeurs
     for bars in [bars1, bars2]:
         for bar in bars:
             height = bar.get_height()
-            ax2.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.0f}', ha='center', va='bottom')
+            plt.text(bar.get_x() + bar.get_width()/2., height + height*0.01,
+                    f'{height:.0f}', ha='center', va='bottom', fontweight='bold', fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(output_path / '02_comparaison_cva.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 02_comparaison_cva.png sauvegardé")
     
     # 3. Réduction du CVA (%)
-    ax3 = axes[0, 2]
+    plt.figure(figsize=(10, 8))
     
     reduction_no_wwr = (1 - cva_with_collat[0]/cva_no_collat[0]) * 100
     reduction_wwr = (1 - cva_with_collat[1]/cva_no_collat[1]) * 100
     
-    bars = ax3.bar(scenarios, [reduction_no_wwr, reduction_wwr], 
-                   color=['skyblue', 'salmon'], alpha=0.8, edgecolor='black')
+    bars = plt.bar(scenarios, [reduction_no_wwr, reduction_wwr], 
+                   color=['skyblue', 'salmon'], alpha=0.8, edgecolor='black', linewidth=2)
     
-    ax3.set_title('Efficacité du Collatéral (%)', fontweight='bold')
-    ax3.set_ylabel('Réduction du CVA (%)')
-    ax3.grid(True, alpha=0.3, axis='y')
+    plt.title('Efficacité du Collatéral (%)', fontweight='bold', fontsize=16)
+    plt.ylabel('Réduction du CVA (%)', fontsize=12)
+    plt.xlabel('Scénarios', fontsize=12)
+    plt.grid(True, alpha=0.3, axis='y')
     
     for bar in bars:
         height = bar.get_height()
-        ax3.text(bar.get_x() + bar.get_width()/2., height,
-                f'{height:.1f}%', ha='center', va='bottom', fontweight='bold')
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.5,
+                f'{height:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=12)
+    
+    plt.tight_layout()
+    plt.savefig(output_path / '03_efficacite_collateral.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 03_efficacite_collateral.png sauvegardé")
     
     # 4. Distribution des expositions à mi-parcours
-    ax4 = axes[1, 0]
+    plt.figure(figsize=(12, 8))
     
     mid_point = len(time_grid) // 2
     npv_mid = analysis_results['paths']['npv'][:, mid_point]
     exposure_collat_mid = analysis_results['paths']['exposure_collat'][:, mid_point]
     
-    ax4.hist(npv_mid, bins=50, alpha=0.5, label='Sans Collatéral', 
-             color='blue', density=True)
-    ax4.hist(exposure_collat_mid, bins=50, alpha=0.5, label='Avec Collatéral', 
-             color='green', density=True)
+    plt.hist(npv_mid, bins=50, alpha=0.6, label='Sans Collatéral', 
+             color='blue', density=True, edgecolor='black')
+    plt.hist(exposure_collat_mid, bins=50, alpha=0.6, label='Avec Collatéral', 
+             color='green', density=True, edgecolor='black')
     
-    ax4.set_title(f'Distribution des Expositions (t={time_grid[mid_point]:.1f} ans)', 
-                  fontweight='bold')
-    ax4.set_xlabel('Exposition (EUR)')
-    ax4.set_ylabel('Densité')
-    ax4.legend()
-    ax4.grid(True, alpha=0.3)
+    plt.axvline(np.mean(npv_mid), color='blue', linestyle='--', linewidth=2,
+                label=f'Moyenne sans collat: {np.mean(npv_mid):.0f}')
+    plt.axvline(np.mean(exposure_collat_mid), color='green', linestyle='--', linewidth=2,
+                label=f'Moyenne avec collat: {np.mean(exposure_collat_mid):.0f}')
+    
+    plt.title(f'Distribution des Expositions (t={time_grid[mid_point]:.1f} ans)', 
+              fontweight='bold', fontsize=16)
+    plt.xlabel('Exposition (EUR)', fontsize=12)
+    plt.ylabel('Densité', fontsize=12)
+    plt.legend(fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output_path / '04_distribution_expositions.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 04_distribution_expositions.png sauvegardé")
     
     # 5. Evolution temporelle de l'impact du collatéral
-    ax5 = axes[1, 1]
+    plt.figure(figsize=(12, 8))
     
     # Calculer la réduction de l'EE dans le temps
     reduction_ee = 100 * (1 - ee_with_collat / np.maximum(ee_no_collat, 1))
     
-    ax5.plot(time_grid[:len(reduction_ee)], reduction_ee, 'purple', linewidth=2)
-    ax5.fill_between(time_grid[:len(reduction_ee)], 0, reduction_ee, 
+    plt.plot(time_grid[:len(reduction_ee)], reduction_ee, 'purple', linewidth=3, marker='o', markersize=4)
+    plt.fill_between(time_grid[:len(reduction_ee)], 0, reduction_ee, 
                      alpha=0.3, color='purple')
     
-    ax5.set_title('Efficacité du Collatéral dans le Temps', fontweight='bold')
-    ax5.set_xlabel('Temps (années)')
-    ax5.set_ylabel('Réduction de l\'EE (%)')
-    ax5.grid(True, alpha=0.3)
-    ax5.axhline(y=np.mean(reduction_ee), color='red', linestyle='--', 
+    plt.title('Efficacité du Collatéral dans le Temps', fontweight='bold', fontsize=16)
+    plt.xlabel('Temps (années)', fontsize=12)
+    plt.ylabel('Réduction de l\'EE (%)', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.axhline(y=np.mean(reduction_ee), color='red', linestyle='--', linewidth=2,
                 label=f'Moyenne: {np.mean(reduction_ee):.1f}%')
-    ax5.legend()
+    plt.legend(fontsize=12)
+    plt.tight_layout()
+    plt.savefig(output_path / '05_efficacite_temporelle.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 05_efficacite_temporelle.png sauvegardé")
     
-    # 6. Tableau récapitulatif
-    ax6 = axes[1, 2]
-    ax6.axis('tight')
-    ax6.axis('off')
+    # 6. Tableau récapitulatif (sauvegardé comme image)
+    fig, ax = plt.subplots(figsize=(14, 10))
+    ax.axis('tight')
+    ax.axis('off')
     
-    # Créer le tableau
+    # Créer le tableau avec plus de détails
     table_data = [
-        ['Métrique', 'Sans Collat', 'Avec Collat', 'Réduction'],
+        ['Métrique', 'Sans Collat', 'Avec Collat', 'Réduction', 'Impact'],
         ['EPE (EUR)', 
          f"{analysis_results['metrics']['no_collat']['epe']:.0f}",
          f"{analysis_results['metrics']['with_collat']['epe']:.0f}",
-         f"{(1-analysis_results['metrics']['with_collat']['epe']/analysis_results['metrics']['no_collat']['epe'])*100:.1f}%"],
+         f"{(1-analysis_results['metrics']['with_collat']['epe']/analysis_results['metrics']['no_collat']['epe'])*100:.1f}%",
+         f"{analysis_results['metrics']['no_collat']['epe'] - analysis_results['metrics']['with_collat']['epe']:.0f} EUR"],
         ['CVA sans WWR (EUR)',
          f"{analysis_results['results']['no_collat_no_wwr']['cva_direct']:.0f}",
          f"{analysis_results['results']['collat_no_wwr']['cva_direct']:.0f}",
-         f"{reduction_no_wwr:.1f}%"],
+         f"{reduction_no_wwr:.1f}%",
+         f"{cva_no_collat[0] - cva_with_collat[0]:.0f} EUR"],
         ['CVA avec WWR (EUR)',
          f"{analysis_results['results']['no_collat_wwr']['cva_direct']:.0f}",
          f"{analysis_results['results']['collat_wwr']['cva_direct']:.0f}",
-         f"{reduction_wwr:.1f}%"],
-        ['Impact WWR',
+         f"{reduction_wwr:.1f}%",
+         f"{cva_no_collat[1] - cva_with_collat[1]:.0f} EUR"],
+        ['CVA en bp (sans WWR)',
+         f"{cva_no_collat[0]/1000000*10000:.1f}",
+         f"{cva_with_collat[0]/1000000*10000:.1f}",
+         f"{(1-cva_with_collat[0]/cva_no_collat[0])*100:.1f}%",
+         f"{(cva_no_collat[0] - cva_with_collat[0])/1000000*10000:.1f} bp"],
+        ['CVA en bp (avec WWR)',
+         f"{cva_no_collat[1]/1000000*10000:.1f}",
+         f"{cva_with_collat[1]/1000000*10000:.1f}",
+         f"{(1-cva_with_collat[1]/cva_no_collat[1])*100:.1f}%",
+         f"{(cva_no_collat[1] - cva_with_collat[1])/1000000*10000:.1f} bp"],
+        ['Impact WWR (%)',
          f"+{(cva_no_collat[1]/cva_no_collat[0]-1)*100:.1f}%",
          f"+{(cva_with_collat[1]/cva_with_collat[0]-1)*100:.1f}%",
-         '-']
+         'Variable',
+         'Diminue avec collatéral']
     ]
     
-    table = ax6.table(cellText=table_data, loc='center', cellLoc='center')
+    table = ax.table(cellText=table_data, loc='center', cellLoc='center')
     table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1.2, 1.8)
+    table.set_fontsize(11)
+    table.scale(1.0, 2.0)
     
     # Style du tableau
     for i in range(len(table_data)):
         for j in range(len(table_data[0])):
             cell = table[(i, j)]
             if i == 0:  # Header
-                cell.set_facecolor('#4CAF50')
+                cell.set_facecolor('#2E7D32')
                 cell.set_text_props(weight='bold', color='white')
             elif j == 0:  # First column
                 cell.set_facecolor('#E8F5E9')
                 cell.set_text_props(weight='bold')
+            elif 'Réduction' in table_data[i][j] and i > 0:  # Reduction column
+                cell.set_facecolor('#C8E6C9')
             else:
                 cell.set_facecolor('#F5F5F5')
     
-    ax6.set_title('Tableau de Synthèse', fontweight='bold', pad=20)
-    
-    plt.suptitle('Analyse CVA: Impact du Collatéral', fontsize=16, fontweight='bold')
+    plt.title('Tableau de Synthèse - Impact du Collatéral sur le CVA', 
+              fontweight='bold', fontsize=16, pad=30)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(output_path / '06_tableau_synthese.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 06_tableau_synthese.png sauvegardé")
+    
+    # 7. Graphique bonus: Trajectoires de taux (échantillon)
+    plt.figure(figsize=(12, 8))
+    
+    rate_paths = analysis_results['paths']['rates']
+    sample_size = min(100, rate_paths.shape[0])
+    
+    for i in range(sample_size):
+        plt.plot(time_grid, rate_paths[i, :], alpha=0.1, color='steelblue')
+    
+    plt.plot(time_grid, np.mean(rate_paths, axis=0), 'darkred', 
+             linewidth=3, label=f'Moyenne finale: {np.mean(rate_paths[:, -1]):.2%}')
+    plt.axhline(y=analysis_results['params']['market'].theta, color='green', 
+                linestyle='--', linewidth=2, label=f'θ = {analysis_results["params"]["market"].theta:.1%}')
+    plt.axhline(y=analysis_results['params']['market'].initial_rate, color='orange', 
+                linestyle=':', linewidth=2, label=f'r₀ = {analysis_results["params"]["market"].initial_rate:.1%}')
+    
+    plt.title('Trajectoires de Taux d\'Intérêt (Modèle Vasicek)', fontweight='bold', fontsize=16)
+    plt.xlabel('Temps (années)', fontsize=12)
+    plt.ylabel('Taux d\'intérêt', fontsize=12)
+    plt.legend(fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output_path / '07_trajectoires_taux.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 07_trajectoires_taux.png sauvegardé")
+    
+    # 8. Graphique bonus: Impact du WWR par scénario
+    plt.figure(figsize=(12, 8))
+    
+    scenarios_detailed = ['Sans Collatéral\n& Sans WWR', 'Sans Collatéral\n& Avec WWR', 
+                         'Avec Collatéral\n& Sans WWR', 'Avec Collatéral\n& Avec WWR']
+    cva_values = [cva_no_collat[0], cva_no_collat[1], cva_with_collat[0], cva_with_collat[1]]
+    colors = ['lightblue', 'red', 'lightgreen', 'darkgreen']
+    
+    bars = plt.bar(scenarios_detailed, cva_values, color=colors, alpha=0.8, 
+                   edgecolor='black', linewidth=1)
+    
+    plt.title('CVA par Scénario: Impact Combiné du Collatéral et du WWR', 
+              fontweight='bold', fontsize=16)
+    plt.ylabel('CVA (EUR)', fontsize=12)
+    plt.xticks(rotation=45, ha='right')
+    plt.grid(True, alpha=0.3, axis='y')
+    
+    # Ajouter les valeurs et les variations
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + height*0.01,
+                f'{height:.0f}', ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        if i == 1:  # Impact WWR sans collatéral
+            change = (cva_values[1] - cva_values[0]) / cva_values[0] * 100
+            plt.annotate(f'+{change:.1f}%', xy=(0.5, max(cva_values[0], cva_values[1])/2),
+                        xytext=(10, 0), textcoords='offset points',
+                        ha='left', va='center', fontweight='bold', color='red',
+                        arrowprops=dict(arrowstyle='->', color='red'))
+        elif i == 3:  # Impact WWR avec collatéral
+            change = (cva_values[3] - cva_values[2]) / cva_values[2] * 100
+            plt.annotate(f'+{change:.1f}%', xy=(2.5, max(cva_values[2], cva_values[3])/2),
+                        xytext=(10, 0), textcoords='offset points',
+                        ha='left', va='center', fontweight='bold', color='darkgreen',
+                        arrowprops=dict(arrowstyle='->', color='darkgreen'))
+    
+    plt.tight_layout()
+    plt.savefig(output_path / '08_impact_combine.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("  ✓ 08_impact_combine.png sauvegardé")
+    
+    print(f"\n✅ Tous les graphiques ont été sauvegardés dans: {output_path.absolute()}")
+    print(f"   Total: 8 fichiers PNG générés")
 
 if __name__ == "__main__":
-    print("Démarrage de l'analyse CVA avec Collatéral...")
-    print("Configuration: Swap unique, comparaison avec/sans collatéral")
+    # Configuration du dossier de sortie
+    OUTPUT_FOLDER = "graphs_cva_collateral"  # Modifier ce chemin selon vos besoins
+    
+    print("🚀 Démarrage de l'analyse CVA avec Collatéral...")
+    print(f"📁 Dossier de sauvegarde: {OUTPUT_FOLDER}")
+    print("📊 Configuration: Swap unique, comparaison avec/sans collatéral")
     
     # Lancer l'analyse
     analysis_results = run_cva_collateral_analysis()
     
-    # Générer les graphiques
-    plot_collateral_analysis(analysis_results)
+    # Sauvegarder les graphiques individuellement
+    save_individual_plots(analysis_results, OUTPUT_FOLDER)
     
-    print("\nAnalyse terminée avec succès!")
-    print("\nCONCLUSIONS:")
-    print("1. Le collatéral réduit significativement l'exposition")
-    print("2. L'efficacité dépend des paramètres (threshold, MTA, MPR)")
-    print("3. Le WWR reste présent même avec collatéral")
-    print("4. La réduction du CVA peut atteindre 30-40% avec des paramètres optimaux")
+    print("\n🎯 RESUME DES RESULTATS:")
+    print("="*60)
+    
+    # Extraire les résultats clés
+    cva_no_collat_wwr = analysis_results['results']['no_collat_wwr']['cva_direct']
+    cva_collat_wwr = analysis_results['results']['collat_wwr']['cva_direct']
+    reduction = (1 - cva_collat_wwr/cva_no_collat_wwr) * 100
+    
+    print(f"CVA de référence:     {cva_no_collat_wwr:8,.0f} EUR")
+    print(f"CVA avec collatéral:  {cva_collat_wwr:8,.0f} EUR")
+    print(f"Bénéfice collatéral:  {cva_no_collat_wwr - cva_collat_wwr:8,.0f} EUR ({reduction:.1f}% réduction)")
+    print(f"CVA en bp (référence): {cva_no_collat_wwr/1000000*10000:7.1f} bp")
+    print(f"CVA en bp (collatéral):{cva_collat_wwr/1000000*10000:7.1f} bp")
+    
+    print("\n📈 CONCLUSIONS:")
+    print("1. ✓ Le collatéral réduit significativement l'exposition")
+    print("2. ✓ L'efficacité dépend des paramètres (threshold, MTA, MPR)")
+    print("3. ✓ Le WWR reste présent même avec collatéral")
+    print("4. ✓ La réduction du CVA peut atteindre 30-40% avec des paramètres optimaux")
+    print(f"5. ✓ Tous les graphiques sauvegardés dans: {OUTPUT_FOLDER}/")
+    
+    print("\n✅ Analyse terminée avec succès!")
